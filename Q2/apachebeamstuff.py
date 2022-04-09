@@ -19,7 +19,6 @@ import logging
 import os
 import math
 import apache_beam as beam
-import tensorflow as tf
 from apache_beam.options.pipeline_options import PipelineOptions
 from apache_beam.options.pipeline_options import SetupOptions
 from kafka import KafkaProducer
@@ -34,25 +33,6 @@ def singleton(cls):
   return getinstance
 
 
-
-@singleton
-class Model():
-
-  def __init__(self, checkpoint):
-    with tf.Graph().as_default() as graph:
-      sess = tf.compat.v1.InteractiveSession()
-      saver = tf.compat.v1.train.import_meta_graph(os.path.join(checkpoint, 'export.meta'))
-      saver.restore(sess, os.path.join(checkpoint, 'export'))
-
-      inputs = json.loads(tf.compat.v1.get_collection('inputs')[0])
-      outputs = json.loads(tf.compat.v1.get_collection('outputs')[0])
-
-      self.x = graph.get_tensor_by_name(inputs['image'])
-      self.p = graph.get_tensor_by_name(outputs['scores'])
-      self.input_key = graph.get_tensor_by_name(inputs['key'])
-      self.output_key = graph.get_tensor_by_name(outputs['key'])
-      self.sess = sess
-
 class FilterNones(beam.DoFn):
     def process(self, element):
         for k,v in element.items():
@@ -64,13 +44,13 @@ class FilterNones(beam.DoFn):
 
 class Conversions(beam.DoFn):
     def process(self, element):
-        temp = element["temp"]
-        humd = element["humd"]
-        pres = element["pres"]
+        temp = element["temperature"]
+        humd = element["humidity"]
+        pres = element["pressure"]
 
         elements = {}
-        elements["temp"] = temp*1.8+32
-        elements["pres"] = pres/6.895
+        elements["temperature"] = temp*1.8+32
+        elements["pressure"] = pres/6.895
         temp = elements["temp"]
         pres = element["pres"]
 
@@ -78,28 +58,13 @@ class Conversions(beam.DoFn):
             if humd>90:
                 element["risk"] = 1
             if pres>=0.2 and humd<=90:
-                element["risk"] = 1-math.pow( 2.71828, 0.2-pres)
+                element["risk"] = 1-math.pow(2.718281828, 0.2-pres)
             if pres < 0.2 and humd <=90:
                 element["risk"] = min(1, temp/300)
         return element
 
-        
-        
 
 
-        
-        
-
-
-
-def riskEstimation(humidity, psi, F):
-    if humidity is not None and psi is not None and F is not None:
-        if humidity>90:
-            return 1
-        if psi>=0.2 and humidity<=90:
-            return 1-math.pow( 2.71828, 0.2-psi)
-        if psi < 0.2 and humidity <=90:
-            return min(1, F/300)
 
 def _to_dictionary(line):
     result = {}
@@ -155,10 +120,11 @@ def run(argv=None):
             | 'Deserializing' >> beam.Map(lambda x : json.loads(x[1])))
         filteredValues = (sensorData | "RemoveNones") >> beam.ParDo(FilterNones())
         newValues = (filteredValues |"UpdateValues") >> beam.ParDo(Conversions())
+        finalData = (newValues | "Serializing" >> beam.Map(lambda x: (None, json.dumps(x).encode('utf-8'))))
         
         # predictions = (sensorData | 'Prediction' >> beam.ParDo(PredictDoFn(), known_args.model)
         #     | "Serializing" >> beam.Map(lambda x: (None,json.dumps(x).encode('utf8'))));
-        predictions |'To kafka' >> beam.ParDo(ProduceKafkaMessage(known_args.output,server_config))
+        finalData |'To kafka' >> beam.ParDo(ProduceKafkaMessage(known_args.output,server_config))
 if __name__ == '__main__':
   logging.getLogger().setLevel(logging.INFO)
   run()
