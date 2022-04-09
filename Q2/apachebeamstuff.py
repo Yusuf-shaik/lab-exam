@@ -118,6 +118,7 @@ def run(argv=None):
         sensorData = (p | "Reading messages from Kafka" >> kafkaio.KafkaConsume(
             consumer_config=consumer_config,value_decoder=bytes.decode) 
             | 'Deserializing' >> beam.Map(lambda x : json.loads(x[1])))
+        
         filteredValues = (sensorData | "RemoveNones") >> beam.ParDo(FilterNones())
         newValues = (filteredValues |"UpdateValues") >> beam.ParDo(Conversions())
         finalData = (newValues | "Serializing" >> beam.Map(lambda x: (None, json.dumps(x).encode('utf-8'))))
