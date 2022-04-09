@@ -1,0 +1,36 @@
+{
+  "doc": "Sample schema to help you get started.",
+  "fields": [
+    {
+      "name": "index",
+      "type": "int"
+    },
+	{
+      "name": "Date",
+      "type": "string"
+    },
+    {
+      "name": "Country_Region",
+      "type": "string"
+    },
+    {
+      "name": "Province_State",
+      "type": "string"
+    },
+    {
+      "name": "Confirmed",
+      "type": "int"
+    },
+    {
+      "name": "Recovered",
+      "type": "int"
+    },
+    {
+      "name": "Deaths",
+      "type": "int"
+    }
+  ],
+  "name": "sampleRecord",
+  "namespace": "com.mycorp.mynamespace",
+  "type": "record"
+}
